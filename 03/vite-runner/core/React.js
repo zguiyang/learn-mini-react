@@ -17,6 +17,7 @@ function createElement(type, props, ...children) {
     }
 }
 let nextUnitOfFiber = null;
+let rootNode = null;
 function render (el, container) {
     nextUnitOfFiber = {
         dom: container,
@@ -24,6 +25,8 @@ function render (el, container) {
             children: [el],
       }
     };
+
+    rootNode = nextUnitOfFiber;
 }
 
 function createDom (fiber) {
@@ -81,12 +84,27 @@ function performUnitOfWork(fiber) {
    return fiber.parent?.sibling;
 }
 
+function commitRoot() {
+    commitWork();
+    rootNode = null;
+}
+
+function commitWork(fiber) {
+    if (!fiber) return;
+    fiber.parent.dom.append(fiber.dom);
+    rootNode.dom.append(fiber.child);
+    rootNode.dom.append(fiber.sibling);
+}
+
 function  workLoop(deadline) {
     let shouldYield = false;
     while (!shouldYield && nextUnitOfFiber) {
         console.log(deadline.timeRemaining());
       nextUnitOfFiber = performUnitOfWork(nextUnitOfFiber);
         shouldYield = deadline.timeRemaining() < 1;
+    }
+    if (!nextUnitOfFiber && rootNode) {
+        commitRoot();
     }
     // requestIdleCallback(workLoop);
 }
