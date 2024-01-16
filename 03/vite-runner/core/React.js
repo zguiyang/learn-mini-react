@@ -1,3 +1,4 @@
+import { isFunction } from '../helper'
 function  createTextNode(text) {
     return {
         type: 'TEXT_ELEMENT',
@@ -12,7 +13,10 @@ function createElement(type, props, ...children) {
         type,
         props: {
             ...props,
-            children: children.map(child => typeof child === 'string' ? createTextNode(child) : child),
+            children: children.map(child => {
+                const isTextNode = typeof child === 'string' || typeof child === 'number';
+                return isTextNode ? createTextNode(child) : child;
+            }),
         },
     }
 }
@@ -41,10 +45,8 @@ function updateProps (fiber, dom) {
             dom[key] = fiber.props[key];
         }
     })
-    fiber.parent.dom.append(dom);
 }
-function initChildren(fiber) {
-    const children = fiber.props.children;
+function initChildren(fiber, children) {
     let prevChild = null;
     children.forEach((child, index) => {
         const newFiber = {
@@ -64,36 +66,47 @@ function initChildren(fiber) {
     });
 }
 function performUnitOfWork(fiber) {
-    // create dom
-   if (!fiber.dom) {
-       const dom = (
-         fiber.dom = createDom(fiber)
-       );
-       updateProps(fiber, dom);
-   }
+    if (!isFunction(fiber.type)) {
+       if (!fiber.dom) {
+         const dom = (
+           fiber.dom = createDom(fiber)
+         );
+         updateProps(fiber, dom);
+       }
+    }
     // init children
-    initChildren(fiber);
+    const children = isFunction(fiber.type) ? [fiber.type(fiber.props)]:fiber.props.children;
+    initChildren(fiber, children);
 
    // next fiber
    if (fiber.child) {
        return fiber.child;
    }
-   if ( fiber.sibling) {
-       return  fiber.sibling;
+  let nextFiber = fiber;
+   while (nextFiber) {
+       if (nextFiber.sibling) {
+           return nextFiber.sibling;
+       }
+       nextFiber = nextFiber.parent;
    }
-   return fiber.parent?.sibling;
 }
 
 function commitRoot() {
-    commitWork();
+    commitWork(rootNode.child);
     rootNode = null;
 }
 
 function commitWork(fiber) {
     if (!fiber) return;
-    fiber.parent.dom.append(fiber.dom);
-    rootNode.dom.append(fiber.child);
-    rootNode.dom.append(fiber.sibling);
+    let fiberParent = fiber.parent;
+    while (!fiberParent.dom) {
+        fiberParent = fiberParent.parent;
+    }
+    if ( fiber.dom) {
+        fiberParent.dom.append(fiber.dom);
+    }
+    commitWork(fiber.child);
+   commitWork(fiber.sibling);
 }
 
 function  workLoop(deadline) {
