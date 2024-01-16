@@ -65,18 +65,31 @@ function initChildren(fiber, children) {
         prevChild = newFiber;
     });
 }
-function performUnitOfWork(fiber) {
-    if (!isFunction(fiber.type)) {
-       if (!fiber.dom) {
-         const dom = (
-           fiber.dom = createDom(fiber)
-         );
-         updateProps(fiber, dom);
-       }
-    }
-    // init children
-    const children = isFunction(fiber.type) ? [fiber.type(fiber.props)]:fiber.props.children;
+
+function updateFunctionComponent(fiber) {
+    const children = [fiber.type(fiber.props)];
     initChildren(fiber, children);
+}
+
+function updateBasicComponent(fiber) {
+    if (!fiber.dom) {
+        const dom = (
+            fiber.dom = createDom(fiber)
+        );
+        updateProps(fiber, dom);
+    }
+    const children = fiber.props.children;
+    initChildren(fiber, children);
+}
+
+function performUnitOfWork(fiber) {
+    const isFunctionComponent = isFunction(fiber.type);
+
+    if (isFunctionComponent) {
+        updateFunctionComponent(fiber);
+    } else {
+        updateBasicComponent(fiber);
+    }
 
    // next fiber
    if (fiber.child) {
