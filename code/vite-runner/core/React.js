@@ -1,13 +1,14 @@
 import { isFunction } from '../helper'
 function  createTextNode(text) {
-    return {
-        type: 'TEXT_ELEMENT',
-        props: {
-            nodeValue: text,
-            children: [],
-        }
+  return {
+    type: 'TEXT_ELEMENT',
+    props: {
+      nodeValue: text,
+      children: [],
     }
+  }
 }
+
 function createElement(type, props, ...children) {
     return {
         type,
@@ -19,18 +20,29 @@ function createElement(type, props, ...children) {
             }),
         },
     }
-}
+ }
 let nextUnitOfFiber = null;
-let rootNode = null;
+let wipRoot = null;
+let currentRootNode = null;
 function render (el, container) {
-    nextUnitOfFiber = {
+    wipRoot = {
         dom: container,
         props: {
             children: [el],
-      }
+      },
     };
 
-    rootNode = nextUnitOfFiber;
+    nextUnitOfFiber = wipRoot;
+}
+
+function  update () {
+    wipRoot = {
+        dom: currentRootNode.dom,
+        props: currentRootNode.props,
+        alternate: currentRootNode,
+    };
+
+  nextUnitOfFiber = wipRoot;
 }
 
 function createDom (fiber) {
@@ -38,24 +50,61 @@ return fiber.type === 'TEXT_ELEMENT' ? document.createTextNode(''): document.cre
 
 }
 
-function updateProps (fiber, dom) {
+function updateProps (prevProps, nextProps, dom) {
+  // remove old props
+  Object.keys(prevProps).forEach(key => {
+    if (key !== 'children') {
+      if (!(key in nextProps)) {
+        dom.removeAttribute(key);
+      }
+    }
+  })
     // update props
-    Object.keys(fiber.props).forEach(key => {
+    Object.keys(nextProps).forEach(key => {
         if (key !== 'children') {
-            dom[key] = fiber.props[key];
+          if (prevProps[key] !== nextProps[key]) {
+            if (key.startsWith('on')) {
+              const eventName = key.substring(2).toLocaleLowerCase();
+              dom.removeEventListener(eventName, prevProps[key]);
+              dom.addEventListener(eventName, nextProps[key]);
+            } else {
+              dom[key] = nextProps[key];
+            }
+          }
         }
     })
 }
-function initChildren(fiber, children) {
+function reconcileChildren(fiber, children) {
     let prevChild = null;
+    let oldFiber = fiber.alternate && fiber.alternate.child;
     children.forEach((child, index) => {
-        const newFiber = {
+        const sameType = oldFiber && child.type === oldFiber.type;
+        let newFiber = null;
+        if (sameType) {
+           newFiber = {
+                type: child.type,
+                props: child.props,
+                parent: fiber,
+                child: null,
+                sibling: null,
+                dom: oldFiber.dom,
+                alternate: oldFiber,
+               effectTag: 'UPDATE',
+            }
+        } else {
+          newFiber = {
             type: child.type,
             props: child.props,
             parent: fiber,
             child: null,
             sibling: null,
             dom: null,
+            effectTag: 'PLACEMENT',
+          }
+        }
+
+        if (oldFiber) {
+            oldFiber = oldFiber.sibling;
         }
         if (index === 0 ) {
             fiber.child = newFiber;
@@ -68,7 +117,7 @@ function initChildren(fiber, children) {
 
 function updateFunctionComponent(fiber) {
     const children = [fiber.type(fiber.props)];
-    initChildren(fiber, children);
+    reconcileChildren(fiber, children);
 }
 
 function updateBasicComponent(fiber) {
@@ -76,10 +125,10 @@ function updateBasicComponent(fiber) {
         const dom = (
             fiber.dom = createDom(fiber)
         );
-        updateProps(fiber, dom);
+        updateProps({}, fiber.props, dom);
     }
     const children = fiber.props.children;
-    initChildren(fiber, children);
+    reconcileChildren(fiber, children);
 }
 
 function performUnitOfWork(fiber) {
@@ -105,8 +154,9 @@ function performUnitOfWork(fiber) {
 }
 
 function commitRoot() {
-    commitWork(rootNode.child);
-    rootNode = null;
+    commitWork(wipRoot.child);
+    currentRootNode = wipRoot;
+    wipRoot = null;
 }
 
 function commitWork(fiber) {
@@ -115,9 +165,15 @@ function commitWork(fiber) {
     while (!fiberParent.dom) {
         fiberParent = fiberParent.parent;
     }
-    if ( fiber.dom) {
+
+    if (fiber.effectTag === 'PLACEMENT') {
+      if ( fiber.dom) {
         fiberParent.dom.append(fiber.dom);
+      }
+    } else if (fiber.effectTag === 'UPDATE') {
+      updateProps(fiber.alternate.props, fiber.props, fiber.dom);
     }
+
     commitWork(fiber.child);
    commitWork(fiber.sibling);
 }
@@ -125,21 +181,21 @@ function commitWork(fiber) {
 function  workLoop(deadline) {
     let shouldYield = false;
     while (!shouldYield && nextUnitOfFiber) {
-        console.log(deadline.timeRemaining());
       nextUnitOfFiber = performUnitOfWork(nextUnitOfFiber);
         shouldYield = deadline.timeRemaining() < 1;
     }
-    if (!nextUnitOfFiber && rootNode) {
+    if (!nextUnitOfFiber && wipRoot) {
         commitRoot();
     }
-    // requestIdleCallback(workLoop);
+    requestIdleCallback(workLoop);
 }
 
 requestIdleCallback(workLoop);
 
 const React = {
-    createElement,
-    render,
+  update,
+  createElement,
+  render,
 }
 
 export default React;
