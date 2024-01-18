@@ -17,13 +17,15 @@ function createElement(type, props, ...children) {
             children: children.map(child => {
                 const isTextNode = typeof child === 'string' || typeof child === 'number';
                 return isTextNode ? createTextNode(child) : child;
-            }),
+            }).filter(Boolean),
         },
     }
  }
 let nextUnitOfFiber = null;
 let wipRoot = null;
+let wipFiber = null;
 let currentRootNode = null;
+let shouldDeleteNodes = [];
 function render (el, container) {
     wipRoot = {
         dom: container,
@@ -36,13 +38,16 @@ function render (el, container) {
 }
 
 function  update () {
+  const currentFiber = wipFiber;
+  return () => {
+    console.log(currentFiber);
     wipRoot = {
-        dom: currentRootNode.dom,
-        props: currentRootNode.props,
-        alternate: currentRootNode,
+      ...currentFiber,
+      alternate: currentFiber,
     };
 
-  nextUnitOfFiber = wipRoot;
+    nextUnitOfFiber = wipRoot;
+  }
 }
 
 function createDom (fiber) {
@@ -101,6 +106,7 @@ function reconcileChildren(fiber, children) {
             dom: null,
             effectTag: 'PLACEMENT',
           }
+          oldFiber && shouldDeleteNodes.push(oldFiber);
         }
 
         if (oldFiber) {
@@ -113,9 +119,15 @@ function reconcileChildren(fiber, children) {
         }
         prevChild = newFiber;
     });
+
+  while (oldFiber) {
+    shouldDeleteNodes.push(oldFiber);
+    oldFiber = oldFiber.sibling;
+  }
 }
 
 function updateFunctionComponent(fiber) {
+  wipFiber = fiber;
     const children = [fiber.type(fiber.props)];
     reconcileChildren(fiber, children);
 }
@@ -154,11 +166,24 @@ function performUnitOfWork(fiber) {
 }
 
 function commitRoot() {
-    commitWork(wipRoot.child);
+  shouldDeleteNodes.forEach(commitDeletions);
+  commitWork(wipRoot.child);
     currentRootNode = wipRoot;
     wipRoot = null;
+    shouldDeleteNodes = [];
 }
 
+function commitDeletions(fiber) {
+  if (fiber.dom) {
+    let fiberParent = fiber.parent;
+    while (!fiberParent.dom) {
+      fiberParent = fiberParent.parent;
+    }
+    fiberParent.dom.removeChild(fiber.dom);
+  } else {
+    commitDeletions(fiber.child);
+  }
+}
 function commitWork(fiber) {
     if (!fiber) return;
     let fiberParent = fiber.parent;
@@ -182,6 +207,10 @@ function  workLoop(deadline) {
     let shouldYield = false;
     while (!shouldYield && nextUnitOfFiber) {
       nextUnitOfFiber = performUnitOfWork(nextUnitOfFiber);
+      if (wipRoot?.sibling?.type === nextUnitOfFiber?.type) {
+        nextUnitOfFiber = null;
+        // console.log(wipRoot, nextUnitOfFiber);
+      }
         shouldYield = deadline.timeRemaining() < 1;
     }
     if (!nextUnitOfFiber && wipRoot) {
