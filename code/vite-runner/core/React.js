@@ -209,7 +209,6 @@ function  workLoop(deadline) {
       nextUnitOfFiber = performUnitOfWork(nextUnitOfFiber);
       if (wipRoot?.sibling?.type === nextUnitOfFiber?.type) {
         nextUnitOfFiber = null;
-        // console.log(wipRoot, nextUnitOfFiber);
       }
         shouldYield = deadline.timeRemaining() < 1;
     }
