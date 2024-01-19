@@ -27,7 +27,7 @@ let wipFiber = null;
 let currentRootNode = null;
 let shouldDeleteNodes = [];
 function render (el, container) {
-    wipRoot = {
+  wipRoot = {
         dom: container,
         props: {
             children: [el],
@@ -40,7 +40,6 @@ function render (el, container) {
 function  update () {
   const currentFiber = wipFiber;
   return () => {
-    console.log(currentFiber);
     wipRoot = {
       ...currentFiber,
       alternate: currentFiber,
@@ -128,6 +127,8 @@ function reconcileChildren(fiber, children) {
 
 function updateFunctionComponent(fiber) {
   wipFiber = fiber;
+  stateHookIndex = 0;
+  stateHooks = [];
     const children = [fiber.type(fiber.props)];
     reconcileChildren(fiber, children);
 }
@@ -220,8 +221,45 @@ function  workLoop(deadline) {
 
 requestIdleCallback(workLoop);
 
+let stateHooks = null;
+let stateHookIndex = 0;
+function useState(initialValue) {
+  const currentFiber = wipFiber;
+  const oldStateHook = currentFiber.alternate?.stateHooks[stateHookIndex];
+  const stateHook = {
+    state: oldStateHook ? oldStateHook.state : initialValue,
+    queue: oldStateHook ? oldStateHook.queue : [],
+  }
+
+  stateHookIndex++;
+  stateHooks.push(stateHook);
+
+  stateHook.queue.forEach( action => {
+   stateHook.state = action(stateHook.state);
+  });
+
+  stateHook.queue = [];
+
+  currentFiber.stateHooks = stateHooks;
+  function setState(action) {
+    const eagerState = typeof action === 'function' ? action(stateHook.state) : action;
+
+    if (eagerState === stateHook.state) return;
+
+    stateHook.queue.push( typeof action === 'function' ? action : () => action);
+    wipRoot = {
+      ...currentFiber,
+      alternate: currentFiber,
+    };
+
+    nextUnitOfFiber = wipRoot;
+  }
+  return [stateHook.state, setState];
+}
+
 const React = {
   update,
+  useState,
   createElement,
   render,
 }

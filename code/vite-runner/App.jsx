@@ -18,9 +18,28 @@ function Counter ({ num }) {
 }
 
 let showBar = false;
-let foo = 1;
 let bar = 2;
 function Foo () {
+  console.log('foo')
+  const [count, setCount] = React.useState(0);
+    const [str, setStr] = React.useState('hello');
+  function handleClick () {
+   setCount(1);
+   // setStr('word');
+    setStr('hello');
+  }
+  return (
+    <div>
+      { count }
+      <div></div>
+      { str }
+      <div></div>
+      <button onClick={handleClick}>点我Foo</button>
+  </div>
+  )
+}
+
+function Bar () {
   console.log('bar render')
   const update = React.update();
   function handleClick () {
@@ -31,21 +50,6 @@ function Foo () {
     <div>
       { bar }
       <button onClick={handleClick}>点我Bar</button>
-  </div>
-  )
-}
-
-function Bar () {
-  console.log('foo render')
-  const update = React.update();
-  function handleClick () {
-    foo++;
-    update();
-  }
-  return (
-    <div>
-      { foo }
-      <button onClick={handleClick}>点我FOO</button>
     </div>
   )
 }
