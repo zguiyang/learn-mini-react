@@ -129,6 +129,7 @@ function updateFunctionComponent(fiber) {
   wipFiber = fiber;
   stateHookIndex = 0;
   stateHooks = [];
+  effectHooks = [];
     const children = [fiber.type(fiber.props)];
     reconcileChildren(fiber, children);
 }
@@ -169,6 +170,7 @@ function performUnitOfWork(fiber) {
 function commitRoot() {
   shouldDeleteNodes.forEach(commitDeletions);
   commitWork(wipRoot.child);
+  commitEffectHooks();
     currentRootNode = wipRoot;
     wipRoot = null;
     shouldDeleteNodes = [];
@@ -202,6 +204,46 @@ function commitWork(fiber) {
 
     commitWork(fiber.child);
    commitWork(fiber.sibling);
+}
+
+function commitEffectHooks () {
+  function run (fiber) {
+    if (!fiber) return;
+    if (!fiber.alternate) {
+      fiber.effectHooks?.forEach(hook => {
+        hook.cleanup = hook.callback();
+      })
+    } else {
+      fiber.effectHooks?.forEach((newHook, index) => {
+        if (newHook.deps.length === 0) {
+          return;
+        }
+        const oldEffectHook = fiber.alternate?.effectHooks[index];
+
+        const needUpdate = oldEffectHook.deps.some((dep, i) => {
+          return dep !== newHook.deps[i];
+        })
+
+        needUpdate && (newHook.cleanup = newHook.callback());
+      })
+    }
+    run(fiber.child);
+    run(fiber.sibling);
+  }
+
+  function runCleanup (fiber) {
+    if (!fiber) return;
+    fiber.alternate?.effectHooks?.forEach((hook, index)=> {
+      if (hook.deps.length !== 0) {
+        hook.cleanup && hook.cleanup();
+      }
+      runCleanup(fiber.child);
+      runCleanup(fiber.sibling);
+    })
+  }
+
+runCleanup(wipRoot);
+run(wipRoot);
 }
 
 function  workLoop(deadline) {
@@ -257,9 +299,22 @@ function useState(initialValue) {
   return [stateHook.state, setState];
 }
 
+let effectHooks = null;
+function useEffect (callback, deps) {
+ const effectHook = {
+   callback,
+   deps,
+   cleanup: undefined,
+ }
+ effectHooks.push(effectHook);
+
+ wipFiber.effectHooks = effectHooks;
+}
+
 const React = {
   update,
   useState,
+  useEffect,
   createElement,
   render,
 }

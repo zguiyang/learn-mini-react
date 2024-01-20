@@ -24,10 +24,27 @@ function Foo () {
   const [count, setCount] = React.useState(0);
     const [str, setStr] = React.useState('hello');
   function handleClick () {
-   setCount(1);
+   setCount(count + 1);
    // setStr('word');
     setStr('hello');
   }
+
+  React.useEffect(() => {
+    console.log('useEffect');
+    return () => {
+      console.log('useEffect clean');
+    }
+  }, []);
+  React.useEffect(() => {
+    console.log('count eff')
+    return () => {
+      console.log('count clean')
+    }
+  }, [ count])
+
+  React.useEffect(() => {
+    console.log('str eff')
+  }, [str])
   return (
     <div>
       { count }
